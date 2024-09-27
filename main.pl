@@ -76,15 +76,20 @@ iniciar :-
      Opcao == 4 -> partida_automatica(TabuleiroInicial, jogador_b)   % Partida automática, jogador B começa
     ).
 
-% Exibe o menu principal de opções
+% Exibe o menu principal de opções com validação
 menu_principal(Opcao) :-
+    repeat, % Repete até que uma condição seja satisfeita
     write('Selecione uma opção:'), nl,
+    write('Observação: caso escolha jogar contra o programa, você é o jogador B e o computador, o jogador A'), nl,
     write('1. Jogar contra o programa (Computador começa)'), nl,
     write('2. Jogar contra o programa (Você começa)'), nl,
     write('3. Assistir a uma partida automática (Jogador A começa)'), nl,
     write('4. Assistir a uma partida automática (Jogador B começa)'), nl,
     read(Opcao),
-    member(Opcao, [1, 2, 3, 4]).
+    ( member(Opcao, [1, 2, 3, 4]) ->  % Se a opção for válida, continue
+        ! ;  % O "!" corta a repetição caso a condição seja satisfeita
+        write('Opção inválida! Por favor, escolha uma opção entre 1 e 4.'), nl, fail  % Caso contrário, exibe mensagem e repete
+    ).
 
 % Alterna o jogador
 prox_jogador(jogador_a, jogador_b).
@@ -105,15 +110,17 @@ jogar(Tabuleiro, JogadorAtual) :-
 % Função para o jogador humano fazer uma jogada
 jogador_humano(Tabuleiro, NovoTabuleiro, Jogador) :-
     format('Sua vez, Jogador ~w.~n', [Jogador]),
-    write('Digite a coluna da peça que deseja mover (a-h): '), read(ColOrig),
-    write('Digite a linha da peça que deseja mover (1-8): '), read(LinOrig),
-    write('Digite a coluna de destino (a-h): '), read(ColDest),
-    write('Digite a linha de destino (1-8): '), read(LinDest),
+    write('Digite a posição da peça que deseja mover (ex: a1): '), read(PosOrig),
+    write('Digite a posição de destino (ex: b2): '), read(PosDest),
+    % Extrai a coluna e a linha das posições
+    atom_chars(PosOrig, [ColOrig, LinOrigChar]), atom_number(LinOrigChar, LinOrig),
+    atom_chars(PosDest, [ColDest, LinDestChar]), atom_number(LinDestChar, LinDest),
     (move_valido(Tabuleiro, Jogador, (ColOrig, LinOrig), (ColDest, LinDest)) ->
         atualiza_tabuleiro(Tabuleiro, (ColOrig, LinOrig), (ColDest, LinDest), Jogador, NovoTabuleiro);
         write('Movimento inválido! Tente novamente.'), nl,
         jogador_humano(Tabuleiro, NovoTabuleiro, Jogador)
     ).
+
 
 % Função para o computador fazer uma jogada (movimento aleatório válido)
 jogador_programa(Tabuleiro, NovoTabuleiro, Jogador) :-
