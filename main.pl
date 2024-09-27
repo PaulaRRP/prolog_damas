@@ -40,13 +40,11 @@ posicao_inicial(Col, Lin, Peca) :-
     \+ cor_casa(Col, Lin, escura),
     Peca = vazio.
 
-% Imprime o tabuleiro
+% Imprime o tabuleiro com espaçamento correto
 imprime_tabuleiro(Tabuleiro) :-
-    nl,
-    write('  A B C D E F G H'), nl,
+    nl, write('   A  B  C  D  E  F  G  H'), nl, % Adicionando espaçamento para alinhar as colunas
     linha_impressao(Lin),
-    write(Lin), write(' '),
-    imprime_linha(Tabuleiro, Lin),
+    format('~w ', [Lin]), imprime_linha(Tabuleiro, Lin), nl,
     fail.
 imprime_tabuleiro(_) :- nl.
 
@@ -57,8 +55,8 @@ imprime_linha(Tabuleiro, Lin) :-
         simbolo_peca(Peca, Simbolo);
         Simbolo = ' '
     ),
-    write(Simbolo), write(' '),
-    (Col == h -> nl ; true),
+    format(' ~w', [Simbolo]),
+    (Col == h -> true ; true),
     fail.
 imprime_linha(_, _) :- true.
 
@@ -69,9 +67,24 @@ simbolo_peca(vazio, '.').
 simbolo_peca(_, ' ').
 
 % Inicia o jogo
-iniciar :-
+iniciar :- 
+    menu_principal(Opcao),
     inicializa_tabuleiro(TabuleiroInicial),
-    jogar(TabuleiroInicial, jogador_b).  % Jogador humano começa
+    (Opcao == 1 -> jogar(TabuleiroInicial, jogador_a);  % Jogador A (computador) começa
+     Opcao == 2 -> jogar(TabuleiroInicial, jogador_b);  % Jogador B (humano) começa
+     Opcao == 3 -> partida_automatica(TabuleiroInicial, jogador_a);  % Partida automática, jogador A começa
+     Opcao == 4 -> partida_automatica(TabuleiroInicial, jogador_b)   % Partida automática, jogador B começa
+    ).
+
+% Exibe o menu principal de opções
+menu_principal(Opcao) :-
+    write('Selecione uma opção:'), nl,
+    write('1. Jogar contra o programa (Computador começa)'), nl,
+    write('2. Jogar contra o programa (Você começa)'), nl,
+    write('3. Assistir a uma partida automática (Jogador A começa)'), nl,
+    write('4. Assistir a uma partida automática (Jogador B começa)'), nl,
+    read(Opcao),
+    member(Opcao, [1, 2, 3, 4]).
 
 % Alterna o jogador
 prox_jogador(jogador_a, jogador_b).
@@ -116,6 +129,16 @@ jogador_programa(Tabuleiro, NovoTabuleiro, Jogador) :-
         write('Computador não tem movimentos válidos.'), nl
     ).
 
+% Função para partida automática
+partida_automatica(Tabuleiro, JogadorAtual) :-
+    imprime_tabuleiro(Tabuleiro),
+    ( jogo_terminado(Tabuleiro, Vencedor) -> 
+        format('Jogo terminado! O vencedor é: ~w~n', [Vencedor]);
+        jogador_programa(Tabuleiro, NovoTabuleiro, JogadorAtual),
+        prox_jogador(JogadorAtual, ProxJogador),
+        partida_automatica(NovoTabuleiro, ProxJogador)
+    ).
+
 % Verifica se o movimento é válido
 move_valido(Tabuleiro, Jogador, (ColO, LinO), (ColD, LinD)) :-
     move_possivel(Tabuleiro, Jogador, (ColO, LinO), (ColD, LinD)).
@@ -156,9 +179,9 @@ atualiza_tabuleiro(Tabuleiro, (ColO, LinO), (ColD, LinD), Jogador, NovoTabuleiro
 
 % Verifica se o jogo terminou
 jogo_terminado(Tabuleiro, Vencedor) :-
-    ( \+ member((_, _, peca_a), Tabuleiro) ->
-        Vencedor = 'Jogador Humano' ;
-      \+ member((_, _, peca_b), Tabuleiro) ->
-        Vencedor = 'Computador' ;
+    ( \+ member((_, _, peca_a), Tabuleiro) -> 
+        Vencedor = 'Jogador Humano' ; 
+      \+ member((_, _, peca_b), Tabuleiro) -> 
+        Vencedor = 'Computador' ; 
       false
     ).
