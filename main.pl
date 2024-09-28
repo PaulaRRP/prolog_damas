@@ -42,7 +42,7 @@ posicao_inicial(Col, Lin, Peca) :-
 
 % Imprime o tabuleiro com espaçamento correto
 imprime_tabuleiro(Tabuleiro) :-
-    nl, write('   A  B  C  D  E  F  G  H'), nl, % Adicionando espaçamento para alinhar as colunas
+    nl, format('   A   B   C   D   E   F   G   H~n'),
     linha_impressao(Lin),
     format('~w ', [Lin]), imprime_linha(Tabuleiro, Lin), nl,
     fail.
@@ -107,20 +107,54 @@ jogar(Tabuleiro, JogadorAtual) :-
         jogar(NovoTabuleiro, ProxJogador)
     ).
 
-% Função para o jogador humano fazer uma jogada
+% Função para o jogador humano fazer uma jogada ou captura
 jogador_humano(Tabuleiro, NovoTabuleiro, Jogador) :-
     format('Sua vez, Jogador ~w.~n', [Jogador]),
-    write('Digite a posição da peça que deseja mover (ex: a1): '), read(PosOrig),
-    write('Digite a posição de destino (ex: b2): '), read(PosDest),
-    % Extrai a coluna e a linha das posições
-    atom_chars(PosOrig, [ColOrig, LinOrigChar]), atom_number(LinOrigChar, LinOrig),
-    atom_chars(PosDest, [ColDest, LinDestChar]), atom_number(LinDestChar, LinDest),
-    (move_valido(Tabuleiro, Jogador, (ColOrig, LinOrig), (ColDest, LinDest)) ->
-        atualiza_tabuleiro(Tabuleiro, (ColOrig, LinOrig), (ColDest, LinDest), Jogador, NovoTabuleiro);
-        write('Movimento inválido! Tente novamente.'), nl,
+    write('Digite o movimento no formato mv(Coord1, Coord2) ou cap(Coord1, [Coord2, Coord3, ..., CoordN]): '), read(Movimento),
+    (Movimento = mv(PosOrig, PosDest) ->
+        % Movimento normal
+        atom_chars(PosOrig, [ColOrig, LinOrigChar]), atom_number(LinOrigChar, LinOrig),
+        atom_chars(PosDest, [ColDest, LinDestChar]), atom_number(LinDestChar, LinDest),
+        (move_valido(Tabuleiro, Jogador, (ColOrig, LinOrig), (ColDest, LinDest)) ->
+            atualiza_tabuleiro(Tabuleiro, (ColOrig, LinOrig), (ColDest, LinDest), Jogador, NovoTabuleiro);
+            write('Movimento inválido! Tente novamente.'), nl,
+            jogador_humano(Tabuleiro, NovoTabuleiro, Jogador)
+        );
+    Movimento = cap(PosOrig, CapturaLista) ->
+        % Captura
+        atom_chars(PosOrig, [ColOrig, LinOrigChar]), atom_number(LinOrigChar, LinOrig),
+        captura(Tabuleiro, Jogador, (ColOrig, LinOrig), CapturaLista, NovoTabuleiro);
+        % Caso comando inválido
+        write('Comando inválido! Use o formato mv(Coord1, Coord2) ou cap(Coord1, [Coord2, Coord3, ...]).'), nl,
         jogador_humano(Tabuleiro, NovoTabuleiro, Jogador)
     ).
 
+% Função para realizar a captura
+captura(Tabuleiro, Jogador, (ColOrig, LinOrig), [PosDest|Capturas], NovoTabuleiro) :-
+    atom_chars(PosDest, [ColDest, LinDestChar]), atom_number(LinDestChar, LinDest),
+    coluna_num(ColOrig, NumColO), coluna_num(ColDest, NumColD),
+    LinMid is (LinOrig + LinDest) // 2,  % Calcula a posição intermediária da linha
+    NumColMid is (NumColO + NumColD) // 2, % Calcula a posição intermediária da coluna
+    coluna_num(ColMid, NumColMid),
+    linha(LinMid),
+    % Verifica se há uma peça adversária para capturar
+    member((ColMid, LinMid, PecaAdversaria), Tabuleiro),
+    peca_adversaria(Jogador, PecaAdversaria),
+    % Atualiza o tabuleiro removendo a peça capturada e movendo a peça
+    select((ColOrig, LinOrig, Peca), Tabuleiro, TempTab1),
+    select((ColMid, LinMid, PecaAdversaria), TempTab1, TempTab2),
+    select((ColDest, LinDest, vazio), TempTab2, TempTab3),
+    NovoTabuleiroTemp = [(ColDest, LinDest, Peca), (ColOrig, LinOrig, vazio)|TempTab3],
+    (Capturas = [] -> NovoTabuleiro = NovoTabuleiroTemp; captura(NovoTabuleiroTemp, Jogador, (ColDest, LinDest), Capturas, NovoTabuleiro)).
+
+% Verifica se uma peça é adversária
+peca_adversaria(jogador_a, peca_b).
+peca_adversaria(jogador_b, peca_a).
+
+% Verifica se a casa de destino está vazia
+casa_vazia(Tabuleiro, (Col, Lin)) :-
+    member((Col, Lin, Peca), Tabuleiro),
+    Peca == vazio.
 
 % Função para o computador fazer uma jogada (movimento aleatório válido)
 jogador_programa(Tabuleiro, NovoTabuleiro, Jogador) :-
@@ -157,11 +191,6 @@ move_possivel(Tabuleiro, Jogador, (ColO, LinO), (ColD, LinD)) :-
     movimento_valido(Jogador, (ColO, LinO), (ColD, LinD)),
     casa_vazia(Tabuleiro, (ColD, LinD)).
 
-% Verifica se a casa de destino está vazia
-casa_vazia(Tabuleiro, (Col, Lin)) :-
-    member((Col, Lin, Peca), Tabuleiro),
-    Peca == vazio.
-
 % Define movimentos válidos para cada jogador
 movimento_valido(jogador_a, (ColO, LinO), (ColD, LinD)) :-  % Computador
     coluna_num(ColO, NumColO), coluna_num(ColD, NumColD),
@@ -186,9 +215,9 @@ atualiza_tabuleiro(Tabuleiro, (ColO, LinO), (ColD, LinD), Jogador, NovoTabuleiro
 
 % Verifica se o jogo terminou
 jogo_terminado(Tabuleiro, Vencedor) :-
-    ( \+ member((_, _, peca_a), Tabuleiro) -> 
-        Vencedor = 'Jogador Humano' ; 
-      \+ member((_, _, peca_b), Tabuleiro) -> 
-        Vencedor = 'Computador' ; 
+    ( \+ member((_, _, peca_a), Tabuleiro) ->
+        Vencedor = 'Jogador Humano' ;
+      \+ member((_, _, peca_b), Tabuleiro) ->
+        Vencedor = 'Computador' ;
       false
     ).
