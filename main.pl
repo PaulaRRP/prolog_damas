@@ -123,15 +123,30 @@ jogador_humano(Tabuleiro, NovoTabuleiro, Jogador) :-
     Movimento = cap(PosOrig, CapturaLista) ->
         % Captura
         atom_chars(PosOrig, [ColOrig, LinOrigChar]), atom_number(LinOrigChar, LinOrig),
-        (validar_captura(Tabuleiro, Jogador, (ColOrig, LinOrig), CapturaLista) ->
+        % Busca todas as capturas possíveis a partir da posição de origem
+        findall(MaiorCaptura, maior_captura(Tabuleiro, Jogador, (ColOrig, LinOrig), MaiorCaptura), TodasCapturas),
+        maior_caminho(TodasCapturas, CaminhoMaior),
+        (validar_captura(Tabuleiro, Jogador, (ColOrig, LinOrig), CapturaLista),
+         length(CapturaLista, TamCaptura),
+         length(CaminhoMaior, TamMaior),
+         (TamCaptura == TamMaior) ->
             captura(Tabuleiro, Jogador, (ColOrig, LinOrig), CapturaLista, NovoTabuleiro);
-            write('Captura inválida! Não é possível capturar as peças selecionadas. Tente novamente.'), nl,
+            % Caso o jogador não realize a maior captura possível
+            format('Captura inválida! O caminho obrigatório é: cap(~w, ~w). Tente novamente.~n', [PosOrig, CaminhoMaior]),
             jogador_humano(Tabuleiro, NovoTabuleiro, Jogador)
         );
         % Caso comando inválido
         write('Comando inválido! Use o formato mv(Coord1, Coord2) ou cap(Coord1, [Coord2, Coord3, ...]).'), nl,
         jogador_humano(Tabuleiro, NovoTabuleiro, Jogador)
     ).
+
+% Encontra o maior caminho de captura disponível
+maior_caminho([Caminho], Caminho).
+maior_caminho([Caminho1, Caminho2 | Restantes], MaiorCaminho) :-
+    length(Caminho1, T1),
+    length(Caminho2, T2),
+    (T1 >= T2 -> maior_caminho([Caminho1 | Restantes], MaiorCaminho);
+                 maior_caminho([Caminho2 | Restantes], MaiorCaminho)).
 
 % Valida a captura antes de executá-la
 validar_captura(Tabuleiro, Jogador, (ColOrig, LinOrig), [PosDest|Capturas]) :-
@@ -149,6 +164,7 @@ validar_captura(Tabuleiro, Jogador, (ColOrig, LinOrig), [PosDest|Capturas]) :-
     % Recursivamente verifica as capturas restantes
     (Capturas = [] -> true; validar_captura(Tabuleiro, Jogador, (ColDest, LinDest), Capturas)).
 
+
 % Função para realizar a captura
 captura(Tabuleiro, Jogador, (ColOrig, LinOrig), [PosDest|Capturas], NovoTabuleiro) :-
     atom_chars(PosDest, [ColDest, LinDestChar]), atom_number(LinDestChar, LinDest),
@@ -159,17 +175,58 @@ captura(Tabuleiro, Jogador, (ColOrig, LinOrig), [PosDest|Capturas], NovoTabuleir
     linha(LinMid),
     % Remove a peça capturada e move a peça do jogador
     select((ColOrig, LinOrig, Peca), Tabuleiro, TempTab1),
+    % Remover a peça adversária capturada
     select((ColMid, LinMid, PecaAdversaria), TempTab1, TempTab2),
     peca_adversaria(Jogador, PecaAdversaria),
     select((ColDest, LinDest, vazio), TempTab2, TempTab3),
-    % Atualiza o tabuleiro com as casas vazias e a nova posição da peça
-    NovoTabuleiroTemp = [(ColDest, LinDest, Peca), (ColOrig, LinOrig, vazio), (ColMid, LinMid, vazio)|TempTab3],
+    NovoTabuleiroTemp = [(ColDest, LinDest, Peca), (ColOrig, LinOrig, vazio)|TempTab3],
     (Capturas = [] -> NovoTabuleiro = NovoTabuleiroTemp; captura(NovoTabuleiroTemp, Jogador, (ColDest, LinDest), Capturas, NovoTabuleiro)).
 
 
 % Verifica se uma peça é adversária
 peca_adversaria(jogador_a, peca_b).
 peca_adversaria(jogador_b, peca_a).
+
+% Encontra a maior sequência de capturas possíveis a partir de uma posição
+maior_captura(Tabuleiro, Jogador, (ColOrig, LinOrig), MaiorCaptura) :-
+    findall(Captura, caminho_captura(Tabuleiro, Jogador, (ColOrig, LinOrig), Captura), TodasCapturas),
+    maior_caminho(TodasCapturas, MaiorCaptura).
+
+% Função auxiliar para encontrar todas as capturas possíveis a partir de uma posição
+caminho_captura(Tabuleiro, Jogador, (ColOrig, LinOrig), [PosDest|Capturas]) :-
+    movimento_captura_valido(Tabuleiro, Jogador, (ColOrig, LinOrig), (ColDest, LinDest)),
+    atom_chars(PosDest, [ColDest, LinDestChar]),
+    atom_number(LinDestChar, LinDest),
+    % Atualiza o tabuleiro para refletir a captura
+    coluna_num(ColOrig, NumColO), coluna_num(ColDest, NumColD),
+    LinMid is (LinOrig + LinDest) // 2,  % Calcula a posição intermediária da linha
+    NumColMid is (NumColO + NumColD) // 2, % Calcula a posição intermediária da coluna
+    coluna_num(ColMid, NumColMid),
+    linha(LinMid),
+    select((ColOrig, LinOrig, Peca), Tabuleiro, TempTab1),
+    select((ColMid, LinMid, PecaAdversaria), TempTab1, TempTab2),
+    peca_adversaria(Jogador, PecaAdversaria),
+    select((ColDest, LinDest, vazio), TempTab2, TempTab3),
+    NovoTabuleiro = [(ColDest, LinDest, Peca), (ColOrig, LinOrig, vazio), (ColMid, LinMid, vazio)|TempTab3],
+    % Encontra os próximos passos da captura
+    (caminho_captura(NovoTabuleiro, Jogador, (ColDest, LinDest), Capturas) -> true; Capturas = []).
+
+% Define se um movimento de captura é válido para o jogador
+movimento_captura_valido(Tabuleiro, Jogador, (ColO, LinO), (ColD, LinD)) :-
+    coluna_num(ColO, NumColO), coluna_num(ColD, NumColD),
+    % O movimento de captura deve ser dois passos à frente ou atrás e para o lado
+    (LinD is LinO + 2; LinD is LinO - 2),
+    (NumColD is NumColO + 2; NumColD is NumColO - 2),
+    % Calcula a posição intermediária para verificar se existe uma peça adversária
+    LinMid is (LinO + LinD) // 2,
+    NumColMid is (NumColO + NumColD) // 2,
+    coluna_num(ColMid, NumColMid),
+    linha(LinMid),
+    % Verifica se a casa intermediária contém uma peça adversária
+    member((ColMid, LinMid, PecaAdversaria), Tabuleiro),
+    peca_adversaria(Jogador, PecaAdversaria),
+    % Verifica se a casa de destino está vazia
+    casa_vazia(Tabuleiro, (ColD, LinD)).
 
 
 % Verifica se a casa de destino está vazia
