@@ -141,11 +141,11 @@ processa_movimento(Movimento, Tabuleiro, NovoTabuleiro, Jogador) :-
         (validar_captura(Tabuleiro, Jogador, (ColOrig, LinOrig), CapturaLista) ->
             length(CapturaLista, TamCaptura),
             length(CaminhoMaior, TamMaior),
-            (TamCaptura =< TamMaior ->  % Permite capturas únicas se não houver outras capturas disponíveis
-                captura(Tabuleiro, Jogador, (ColOrig, LinOrig), CapturaLista, NovoTabuleiro);
-                % Caso o jogador não realize a maior captura possível
-                format('Captura inválida! O caminho obrigatório é: cap(~w, ~w). Tente novamente.~n', [PosOrig, CaminhoMaior]),
-                jogador_humano(Tabuleiro, NovoTabuleiro, Jogador)
+            (TamCaptura < TamMaior ->
+                % Notifica que o jogador deve realizar a maior captura possível
+                format('Captura inválida! Você deve realizar a captura obrigatória: cap(~w, ~w). Tente novamente.~n', [PosOrig, CaminhoMaior]),
+                jogador_humano(Tabuleiro, NovoTabuleiro, Jogador);
+                captura(Tabuleiro, Jogador, (ColOrig, LinOrig), CapturaLista, NovoTabuleiro)
             )
         ;
             % Caso a captura não seja válida
@@ -157,7 +157,6 @@ processa_movimento(Movimento, Tabuleiro, NovoTabuleiro, Jogador) :-
     write('Comando inválido! Tente novamente.'), nl,
     jogador_humano(Tabuleiro, NovoTabuleiro, Jogador)
     ).
-
 
 % Encontra o maior caminho de captura disponível
 maior_caminho([Caminho], Caminho).
