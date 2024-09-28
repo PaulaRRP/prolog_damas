@@ -110,7 +110,7 @@ jogar(Tabuleiro, JogadorAtual) :-
 % Função para o jogador humano fazer uma jogada ou captura
 jogador_humano(Tabuleiro, NovoTabuleiro, Jogador) :-
     format('Sua vez, Jogador ~w.~n', [Jogador]),
-    write('Digite o movimento no formato mv(Coord1, Coord2) ou cap(Coord1, [Coord2, Coord3, ..., CoordN]): '), read(Movimento),
+    write('Digite o movimento no formato mv(Coord1, Coord2) ou cap(Coord1, [Alvo1, Alvo2, ..., AlvoN]): '), read(Movimento),
     (Movimento = mv(PosOrig, PosDest) ->
         % Movimento normal
         atom_chars(PosOrig, [ColOrig, LinOrigChar]), atom_number(LinOrigChar, LinOrig),
@@ -123,14 +123,18 @@ jogador_humano(Tabuleiro, NovoTabuleiro, Jogador) :-
     Movimento = cap(PosOrig, CapturaLista) ->
         % Captura
         atom_chars(PosOrig, [ColOrig, LinOrigChar]), atom_number(LinOrigChar, LinOrig),
-        captura(Tabuleiro, Jogador, (ColOrig, LinOrig), CapturaLista, NovoTabuleiro);
+        (validar_captura(Tabuleiro, Jogador, (ColOrig, LinOrig), CapturaLista) ->
+            captura(Tabuleiro, Jogador, (ColOrig, LinOrig), CapturaLista, NovoTabuleiro);
+            write('Captura inválida! Não é possível capturar as peças selecionadas. Tente novamente.'), nl,
+            jogador_humano(Tabuleiro, NovoTabuleiro, Jogador)
+        );
         % Caso comando inválido
         write('Comando inválido! Use o formato mv(Coord1, Coord2) ou cap(Coord1, [Coord2, Coord3, ...]).'), nl,
         jogador_humano(Tabuleiro, NovoTabuleiro, Jogador)
     ).
 
-% Função para realizar a captura
-captura(Tabuleiro, Jogador, (ColOrig, LinOrig), [PosDest|Capturas], NovoTabuleiro) :-
+% Valida a captura antes de executá-la
+validar_captura(Tabuleiro, Jogador, (ColOrig, LinOrig), [PosDest|Capturas]) :-
     atom_chars(PosDest, [ColDest, LinDestChar]), atom_number(LinDestChar, LinDest),
     coluna_num(ColOrig, NumColO), coluna_num(ColDest, NumColD),
     LinMid is (LinOrig + LinDest) // 2,  % Calcula a posição intermediária da linha
@@ -140,16 +144,33 @@ captura(Tabuleiro, Jogador, (ColOrig, LinOrig), [PosDest|Capturas], NovoTabuleir
     % Verifica se há uma peça adversária para capturar
     member((ColMid, LinMid, PecaAdversaria), Tabuleiro),
     peca_adversaria(Jogador, PecaAdversaria),
-    % Atualiza o tabuleiro removendo a peça capturada e movendo a peça
+    % Verifica se a casa de destino está vazia
+    casa_vazia(Tabuleiro, (ColDest, LinDest)),
+    % Recursivamente verifica as capturas restantes
+    (Capturas = [] -> true; validar_captura(Tabuleiro, Jogador, (ColDest, LinDest), Capturas)).
+
+% Função para realizar a captura
+captura(Tabuleiro, Jogador, (ColOrig, LinOrig), [PosDest|Capturas], NovoTabuleiro) :-
+    atom_chars(PosDest, [ColDest, LinDestChar]), atom_number(LinDestChar, LinDest),
+    coluna_num(ColOrig, NumColO), coluna_num(ColDest, NumColD),
+    LinMid is (LinOrig + LinDest) // 2,  % Calcula a posição intermediária da linha
+    NumColMid is (NumColO + NumColD) // 2, % Calcula a posição intermediária da coluna
+    coluna_num(ColMid, NumColMid),
+    linha(LinMid),
+    % Remove a peça capturada e move a peça do jogador
     select((ColOrig, LinOrig, Peca), Tabuleiro, TempTab1),
     select((ColMid, LinMid, PecaAdversaria), TempTab1, TempTab2),
+    peca_adversaria(Jogador, PecaAdversaria),
     select((ColDest, LinDest, vazio), TempTab2, TempTab3),
-    NovoTabuleiroTemp = [(ColDest, LinDest, Peca), (ColOrig, LinOrig, vazio)|TempTab3],
+    % Atualiza o tabuleiro com as casas vazias e a nova posição da peça
+    NovoTabuleiroTemp = [(ColDest, LinDest, Peca), (ColOrig, LinOrig, vazio), (ColMid, LinMid, vazio)|TempTab3],
     (Capturas = [] -> NovoTabuleiro = NovoTabuleiroTemp; captura(NovoTabuleiroTemp, Jogador, (ColDest, LinDest), Capturas, NovoTabuleiro)).
+
 
 % Verifica se uma peça é adversária
 peca_adversaria(jogador_a, peca_b).
 peca_adversaria(jogador_b, peca_a).
+
 
 % Verifica se a casa de destino está vazia
 casa_vazia(Tabuleiro, (Col, Lin)) :-
