@@ -107,14 +107,25 @@ jogar(Tabuleiro, JogadorAtual) :-
         jogar(NovoTabuleiro, ProxJogador)
     ).
 
-% Função para o jogador humano fazer uma jogada ou captura
+% Função para o jogador humano fazer uma jogada ou captura com tratamento de erro de sintaxe
 jogador_humano(Tabuleiro, NovoTabuleiro, Jogador) :-
     format('Sua vez, Jogador ~w.~n', [Jogador]),
-    write('Digite o movimento no formato mv(Coord1, Coord2) ou cap(Coord1, [Alvo1, Alvo2, ..., AlvoN]): '), read(Movimento),
+    write('Digite o movimento no formato mv(Coord1, Coord2) ou cap(Coord1, [Alvo1, Alvo2, ..., AlvoN]): '),
+    read_line_to_string(user_input, Input), % Lê a entrada como string
+    (   catch(term_string(Movimento, Input), _, fail) -> % Tenta converter a string para um termo
+        processa_movimento(Movimento, Tabuleiro, NovoTabuleiro, Jogador)
+    ;   write('Comando inválido! Tente novamente.'), nl,
+        jogador_humano(Tabuleiro, NovoTabuleiro, Jogador)
+    ).
+
+% Função auxiliar para processar o movimento
+processa_movimento(Movimento, Tabuleiro, NovoTabuleiro, Jogador) :-
     (Movimento = mv(PosOrig, PosDest) ->
         % Movimento normal
-        atom_chars(PosOrig, [ColOrig, LinOrigChar]), atom_number(LinOrigChar, LinOrig),
-        atom_chars(PosDest, [ColDest, LinDestChar]), atom_number(LinDestChar, LinDest),
+        atom_chars(PosOrig, [ColOrig, LinOrigChar]),
+        atom_number(LinOrigChar, LinOrig),
+        atom_chars(PosDest, [ColDest, LinDestChar]),
+        atom_number(LinDestChar, LinDest),
         (move_valido(Tabuleiro, Jogador, (ColOrig, LinOrig), (ColDest, LinDest)) ->
             atualiza_tabuleiro(Tabuleiro, (ColOrig, LinOrig), (ColDest, LinDest), Jogador, NovoTabuleiro);
             write('Movimento inválido! Tente novamente.'), nl,
@@ -122,7 +133,8 @@ jogador_humano(Tabuleiro, NovoTabuleiro, Jogador) :-
         );
     Movimento = cap(PosOrig, CapturaLista) ->
         % Captura
-        atom_chars(PosOrig, [ColOrig, LinOrigChar]), atom_number(LinOrigChar, LinOrig),
+        atom_chars(PosOrig, [ColOrig, LinOrigChar]),
+        atom_number(LinOrigChar, LinOrig),
         % Busca todas as capturas possíveis a partir da posição de origem
         findall(MaiorCaptura, maior_captura(Tabuleiro, Jogador, (ColOrig, LinOrig), MaiorCaptura), TodasCapturas),
         maior_caminho(TodasCapturas, CaminhoMaior),
@@ -135,10 +147,11 @@ jogador_humano(Tabuleiro, NovoTabuleiro, Jogador) :-
             format('Captura inválida! O caminho obrigatório é: cap(~w, ~w). Tente novamente.~n', [PosOrig, CaminhoMaior]),
             jogador_humano(Tabuleiro, NovoTabuleiro, Jogador)
         );
-        % Caso comando inválido
-        write('Comando inválido! Use o formato mv(Coord1, Coord2) ou cap(Coord1, [Coord2, Coord3, ...]).'), nl,
-        jogador_humano(Tabuleiro, NovoTabuleiro, Jogador)
+    % Caso comando inválido
+    write('Comando inválido! Tente novamente.'), nl,
+    jogador_humano(Tabuleiro, NovoTabuleiro, Jogador)
     ).
+
 
 % Encontra o maior caminho de captura disponível
 maior_caminho([Caminho], Caminho).
