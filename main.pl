@@ -118,7 +118,7 @@ jogador_humano(Tabuleiro, NovoTabuleiro, Jogador) :-
         jogador_humano(Tabuleiro, NovoTabuleiro, Jogador)
     ).
 
-% Função auxiliar para processar o movimento
+%Função auxiliar que realiza a lógica do processamento do movimento escolhido
 processa_movimento(Movimento, Tabuleiro, NovoTabuleiro, Jogador) :-
     (Movimento = mv(PosOrig, PosDest) ->
         % Movimento normal
@@ -138,15 +138,21 @@ processa_movimento(Movimento, Tabuleiro, NovoTabuleiro, Jogador) :-
         % Busca todas as capturas possíveis a partir da posição de origem
         findall(MaiorCaptura, maior_captura(Tabuleiro, Jogador, (ColOrig, LinOrig), MaiorCaptura), TodasCapturas),
         maior_caminho(TodasCapturas, CaminhoMaior),
-        (validar_captura(Tabuleiro, Jogador, (ColOrig, LinOrig), CapturaLista),
-         length(CapturaLista, TamCaptura),
-         length(CaminhoMaior, TamMaior),
-         (TamCaptura == TamMaior) ->
-            captura(Tabuleiro, Jogador, (ColOrig, LinOrig), CapturaLista, NovoTabuleiro);
-            % Caso o jogador não realize a maior captura possível
+        (validar_captura(Tabuleiro, Jogador, (ColOrig, LinOrig), CapturaLista) ->
+            length(CapturaLista, TamCaptura),
+            length(CaminhoMaior, TamMaior),
+            (TamCaptura =< TamMaior ->  % Permite capturas únicas se não houver outras capturas disponíveis
+                captura(Tabuleiro, Jogador, (ColOrig, LinOrig), CapturaLista, NovoTabuleiro);
+                % Caso o jogador não realize a maior captura possível
+                format('Captura inválida! O caminho obrigatório é: cap(~w, ~w). Tente novamente.~n', [PosOrig, CaminhoMaior]),
+                jogador_humano(Tabuleiro, NovoTabuleiro, Jogador)
+            )
+        ;
+            % Caso a captura não seja válida
             format('Captura inválida! O caminho obrigatório é: cap(~w, ~w). Tente novamente.~n', [PosOrig, CaminhoMaior]),
             jogador_humano(Tabuleiro, NovoTabuleiro, Jogador)
-        );
+        )
+    ;
     % Caso comando inválido
     write('Comando inválido! Tente novamente.'), nl,
     jogador_humano(Tabuleiro, NovoTabuleiro, Jogador)
@@ -163,20 +169,23 @@ maior_caminho([Caminho1, Caminho2 | Restantes], MaiorCaminho) :-
 
 % Valida a captura antes de executá-la
 validar_captura(Tabuleiro, Jogador, (ColOrig, LinOrig), [PosDest|Capturas]) :-
-    atom_chars(PosDest, [ColDest, LinDestChar]), atom_number(LinDestChar, LinDest),
-    coluna_num(ColOrig, NumColO), coluna_num(ColDest, NumColD),
-    LinMid is (LinOrig + LinDest) // 2,  % Calcula a posição intermediária da linha
-    NumColMid is (NumColO + NumColD) // 2, % Calcula a posição intermediária da coluna
-    coluna_num(ColMid, NumColMid),
-    linha(LinMid),
-    % Verifica se há uma peça adversária para capturar
-    member((ColMid, LinMid, PecaAdversaria), Tabuleiro),
-    peca_adversaria(Jogador, PecaAdversaria),
-    % Verifica se a casa de destino está vazia
-    casa_vazia(Tabuleiro, (ColDest, LinDest)),
-    % Recursivamente verifica as capturas restantes
-    (Capturas = [] -> true; validar_captura(Tabuleiro, Jogador, (ColDest, LinDest), Capturas)).
-
+    ( atom_chars(PosDest, [ColDest, LinDestChar]),
+      atom_number(LinDestChar, LinDest),
+      coluna_num(ColOrig, NumColO), coluna_num(ColDest, NumColD),
+      LinMid is (LinOrig + LinDest) // 2,  % Calcula a posição intermediária da linha
+      NumColMid is (NumColO + NumColD) // 2, % Calcula a posição intermediária da coluna
+      coluna_num(ColMid, NumColMid),
+      linha(LinMid),
+      % Verifica se há uma peça adversária para capturar
+      member((ColMid, LinMid, PecaAdversaria), Tabuleiro),
+      peca_adversaria(Jogador, PecaAdversaria),
+      % Verifica se a casa de destino está vazia
+      casa_vazia(Tabuleiro, (ColDest, LinDest)) ->
+        % Recursivamente verifica as capturas restantes, permite finalizar a jogada se não houver mais capturas possíveis
+        (Capturas = [] -> true; validar_captura(Tabuleiro, Jogador, (ColDest, LinDest), Capturas))
+    ; % Caso a validação falhe, mostrar erro
+      write('Captura inválida! Verifique as coordenadas e tente novamente.'), nl, fail
+    ).
 
 % Função para realizar a captura
 captura(Tabuleiro, Jogador, (ColOrig, LinOrig), [PosDest|Capturas], NovoTabuleiro) :-
@@ -192,7 +201,7 @@ captura(Tabuleiro, Jogador, (ColOrig, LinOrig), [PosDest|Capturas], NovoTabuleir
     select((ColMid, LinMid, PecaAdversaria), TempTab1, TempTab2),
     peca_adversaria(Jogador, PecaAdversaria),
     select((ColDest, LinDest, vazio), TempTab2, TempTab3),
-    NovoTabuleiroTemp = [(ColDest, LinDest, Peca), (ColOrig, LinOrig, vazio)|TempTab3],
+    NovoTabuleiroTemp = [(ColDest, LinDest, Peca), (ColOrig, LinOrig, vazio), (ColMid, LinMid, vazio)|TempTab3],
     (Capturas = [] -> NovoTabuleiro = NovoTabuleiroTemp; captura(NovoTabuleiroTemp, Jogador, (ColDest, LinDest), Capturas, NovoTabuleiro)).
 
 
@@ -208,8 +217,9 @@ maior_captura(Tabuleiro, Jogador, (ColOrig, LinOrig), MaiorCaptura) :-
 % Função auxiliar para encontrar todas as capturas possíveis a partir de uma posição
 caminho_captura(Tabuleiro, Jogador, (ColOrig, LinOrig), [PosDest|Capturas]) :-
     movimento_captura_valido(Tabuleiro, Jogador, (ColOrig, LinOrig), (ColDest, LinDest)),
-    atom_chars(PosDest, [ColDest, LinDestChar]),
-    atom_number(LinDestChar, LinDest),
+    % Constrói PosDest a partir de ColDest e LinDest
+    atom_number(LinDestAtom, LinDest),
+    atom_concat(ColDest, LinDestAtom, PosDest),
     % Atualiza o tabuleiro para refletir a captura
     coluna_num(ColOrig, NumColO), coluna_num(ColDest, NumColD),
     LinMid is (LinOrig + LinDest) // 2,  % Calcula a posição intermediária da linha
@@ -223,6 +233,7 @@ caminho_captura(Tabuleiro, Jogador, (ColOrig, LinOrig), [PosDest|Capturas]) :-
     NovoTabuleiro = [(ColDest, LinDest, Peca), (ColOrig, LinOrig, vazio), (ColMid, LinMid, vazio)|TempTab3],
     % Encontra os próximos passos da captura
     (caminho_captura(NovoTabuleiro, Jogador, (ColDest, LinDest), Capturas) -> true; Capturas = []).
+
 
 % Define se um movimento de captura é válido para o jogador
 movimento_captura_valido(Tabuleiro, Jogador, (ColO, LinO), (ColD, LinD)) :-
