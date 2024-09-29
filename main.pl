@@ -220,7 +220,6 @@ captura(Tabuleiro, Jogador, (ColOrig, LinOrig), [PosDest|Capturas], NovoTabuleir
     NovoTabuleiroTemp = [(ColDest, LinDest, Peca), (ColOrig, LinOrig, vazio), (ColMid, LinMid, vazio)|TempTab3],
     (Capturas = [] -> NovoTabuleiro = NovoTabuleiroTemp; captura(NovoTabuleiroTemp, Jogador, (ColDest, LinDest), Capturas, NovoTabuleiro)).
 
-
 % Verifica se uma peça é adversária
 peca_adversaria(jogador_a, peca_b).
 peca_adversaria(jogador_b, peca_a).
@@ -228,7 +227,11 @@ peca_adversaria(jogador_b, peca_a).
 % Encontra a maior sequência de capturas possíveis a partir de uma posição
 maior_captura(Tabuleiro, Jogador, (ColOrig, LinOrig), MaiorCaptura) :-
     findall(Captura, caminho_captura(Tabuleiro, Jogador, (ColOrig, LinOrig), Captura), TodasCapturas),
-    maior_caminho(TodasCapturas, MaiorCaptura).
+    (TodasCapturas \= [] ->
+        maior_caminho(TodasCapturas, MaiorCaptura)
+    ;
+        MaiorCaptura = []
+    ).
 
 % Função auxiliar para encontrar todas as capturas possíveis a partir de uma posição
 caminho_captura(Tabuleiro, Jogador, (ColOrig, LinOrig), [PosDest|Capturas]) :-
@@ -250,7 +253,6 @@ caminho_captura(Tabuleiro, Jogador, (ColOrig, LinOrig), [PosDest|Capturas]) :-
     % Encontra os próximos passos da captura
     (caminho_captura(NovoTabuleiro, Jogador, (ColDest, LinDest), Capturas) -> true; Capturas = []).
 
-
 % Define se um movimento de captura é válido para o jogador
 movimento_captura_valido(Tabuleiro, Jogador, (ColO, LinO), (ColD, LinD)) :-
     coluna_num(ColO, NumColO), coluna_num(ColD, NumColD),
@@ -268,19 +270,126 @@ movimento_captura_valido(Tabuleiro, Jogador, (ColO, LinO), (ColD, LinD)) :-
     % Verifica se a casa de destino está vazia
     casa_vazia(Tabuleiro, (ColD, LinD)).
 
-
 % Verifica se a casa de destino está vazia
 casa_vazia(Tabuleiro, (Col, Lin)) :-
     member((Col, Lin, Peca), Tabuleiro),
     Peca == vazio.
 
-% Função para o computador fazer uma jogada (movimento aleatório válido)
+% Função para o computador fazer uma jogada com prioridades
 jogador_programa(Tabuleiro, NovoTabuleiro, Jogador) :-
     write('Vez do computador...'), nl,
+    % Primeiro, verifica se pode capturar alguma peça do jogador
+    findall((ColOrig, LinOrig, Captura),
+        (member((ColOrig, LinOrig, Peca), Tabuleiro),
+         peça(Jogador, Peca),
+         maior_captura(Tabuleiro, Jogador, (ColOrig, LinOrig), Captura),
+         Captura \= []
+        ),
+        CapturasPossiveis),
+    (CapturasPossiveis \= [] ->
+        % Se houver capturas possíveis, escolhe a melhor
+        selecionar_melhor_captura(CapturasPossiveis, (ColOrig, LinOrig, MelhorCaptura)),
+        executar_captura(Tabuleiro, Jogador, (ColOrig, LinOrig, MelhorCaptura), NovoTabuleiro)
+    ;   % Caso contrário, verifica se alguma peça está em perigo e tenta bloquear
+        % Encontra peças do computador que podem ser capturadas
+        findall((ColPerigo, LinPerigo),
+            (member((ColPerigo, LinPerigo, PecaPerigo), Tabuleiro),
+             peça(Jogador, PecaPerigo),
+             peca_em_perigo(Tabuleiro, Jogador, (ColPerigo, LinPerigo))
+            ),
+            PecasEmPerigo),
+        (PecasEmPerigo \= [] ->
+            % Tenta bloquear a captura
+            bloquear_captura(Tabuleiro, Jogador, PecasEmPerigo, NovoTabuleiro)
+        ;   % Se não houver peças em perigo, move uma peça para frente
+            mover_peca(Tabuleiro, Jogador, NovoTabuleiro)
+        )
+    ).
+
+% Seleciona a melhor captura possível (a que captura mais peças)
+selecionar_melhor_captura(CapturasPossiveis, (ColOrig, LinOrig, MelhorCaptura)) :-
+    CapturasPossiveis = [(ColOrig1, LinOrig1, Captura1)|Restantes],
+    selecionar_melhor_captura_aux(Restantes, (ColOrig1, LinOrig1, Captura1), (ColOrig, LinOrig, MelhorCaptura)).
+
+selecionar_melhor_captura_aux([], Melhor, Melhor).
+selecionar_melhor_captura_aux([(ColO, LinO, Captura)|Rest], (ColOMelhor, LinOMelhor, CapturaMelhor), Resultado) :-
+    length(Captura, Tamanho),
+    length(CapturaMelhor, TamanhoMelhor),
+    (Tamanho > TamanhoMelhor ->
+        selecionar_melhor_captura_aux(Rest, (ColO, LinO, Captura), Resultado);
+        selecionar_melhor_captura_aux(Rest, (ColOMelhor, LinOMelhor, CapturaMelhor), Resultado)
+    ).
+
+% Executa a captura selecionada
+executar_captura(Tabuleiro, Jogador, (ColOrig, LinOrig, CapturaLista), NovoTabuleiro) :-
+    % Converte (ColOrig, LinOrig) em PosOrig
+    atom_number(LinOrigAtom, LinOrig),
+    atom_concat(ColOrig, LinOrigAtom, PosOrig),
+    captura(Tabuleiro, Jogador, (ColOrig, LinOrig), CapturaLista, NovoTabuleiro),
+    format('Computador captura de ~w para ~w.~n', [PosOrig, CapturaLista]).
+
+% Verifica se uma peça está em perigo de ser capturada pelo oponente
+peca_em_perigo(Tabuleiro, Jogador, (ColPerigo, LinPerigo)) :-
+    peca_adversaria(Jogador, Adversario),
+    member((ColOrig, LinOrig, PecaAdv), Tabuleiro),
+    peça(Adversario, PecaAdv),
+    movimento_captura_valido(Tabuleiro, Adversario, (ColOrig, LinOrig), (ColDest, LinDest)),
+    % Calcula a posição intermediária
+    coluna_num(ColOrig, NumColO), coluna_num(ColDest, NumColD),
+    LinMid is (LinOrig + LinDest) // 2,
+    NumColMid is (NumColO + NumColD) // 2,
+    coluna_num(ColMid, NumColMid),
+    LinMid = LinPerigo,
+    ColMid = ColPerigo.
+
+% Encontra todas as posições onde o adversário pode capturar nossas peças
+posicoes_perigo(Tabuleiro, Jogador, PosicoesPerigo) :-
+    peca_adversaria(Jogador, Adversario),
+    findall((ColDest, LinDest),
+        (
+            member((ColOrig, LinOrig, PecaAdv), Tabuleiro),
+            peça(Adversario, PecaAdv),
+            movimento_captura_valido(Tabuleiro, Adversario, (ColOrig, LinOrig), (ColDest, LinDest)),
+            % Calcula a posição intermediária (posição da nossa peça)
+            coluna_num(ColOrig, NumColO), coluna_num(ColDest, NumColD),
+            LinMid is (LinOrig + LinDest) // 2,
+            NumColMid is (NumColO + NumColD) // 2,
+            coluna_num(ColMid, NumColMid),
+            linha(LinMid),
+            % Verifica se a peça intermediária é nossa
+            member((ColMid, LinMid, PecaNossa), Tabuleiro),
+            peça(Jogador, PecaNossa)
+        ),
+        PosicoesPerigoRepetidas),
+    list_to_set(PosicoesPerigoRepetidas, PosicoesPerigo).
+
+% Tenta bloquear a captura movendo uma peça para a posição de destino da captura adversária
+bloquear_captura(Tabuleiro, Jogador, _PecasEmPerigo, NovoTabuleiro) :-
+    posicoes_perigo(Tabuleiro, Jogador, PosicoesPerigo),
+    member((ColBloqueio, LinBloqueio), PosicoesPerigo),
+    % Encontra movimentos possíveis que chegam nessa posição
+    findall((ColO, LinO, ColBloqueio, LinBloqueio),
+        (member((ColO, LinO, Peca), Tabuleiro),
+         peça(Jogador, Peca),
+         movimento_valido(Jogador, (ColO, LinO), (ColBloqueio, LinBloqueio)),
+         casa_vazia(Tabuleiro, (ColBloqueio, LinBloqueio))
+        ),
+        MovimentosBloqueio),
+    MovimentosBloqueio \= [],
+    % Escolhe um movimento de bloqueio
+    random_member((ColOrig, LinOrig, ColDest, LinDest), MovimentosBloqueio),
+    format('Computador move de (~w,~w) para (~w,~w) para bloquear captura.~n', [ColOrig, LinOrig, ColDest, LinDest]),
+    atualiza_tabuleiro(Tabuleiro, (ColOrig, LinOrig), (ColDest, LinDest), Jogador, NovoTabuleiro),
+    !. % Corta para evitar backtracking
+bloquear_captura(_, _, _, _) :- fail.
+
+% Move uma peça para frente
+mover_peca(Tabuleiro, Jogador, NovoTabuleiro) :-
     findall((ColO, LinO, ColD, LinD),
             move_possivel(Tabuleiro, Jogador, (ColO, LinO), (ColD, LinD)),
             Movimentos),
     (Movimentos \= [] ->
+        % Pode adicionar lógica para escolher o melhor movimento
         random_member((ColOrig, LinOrig, ColDest, LinDest), Movimentos),
         format('Computador move de (~w,~w) para (~w,~w).~n', [ColOrig, LinOrig, ColDest, LinDest]),
         atualiza_tabuleiro(Tabuleiro, (ColOrig, LinOrig), (ColDest, LinDest), Jogador, NovoTabuleiro);
@@ -334,8 +443,8 @@ atualiza_tabuleiro(Tabuleiro, (ColO, LinO), (ColD, LinD), Jogador, NovoTabuleiro
 % Verifica se o jogo terminou
 jogo_terminado(Tabuleiro, Vencedor) :-
     ( \+ member((_, _, peca_a), Tabuleiro) ->
-        Vencedor = 'Jogador Humano' ;
+        Vencedor = 'Jogador B' ;
       \+ member((_, _, peca_b), Tabuleiro) ->
-        Vencedor = 'Computador' ;
+        Vencedor = 'Jogador A' ;
       false
     ).
