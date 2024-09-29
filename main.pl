@@ -109,7 +109,7 @@ jogar(Tabuleiro, JogadorAtual) :-
 
 % Função para o jogador humano fazer uma jogada ou captura com tratamento de erro de sintaxe
 jogador_humano(Tabuleiro, NovoTabuleiro, Jogador) :-
-    format('Sua vez, Jogador ~w.~n', [Jogador]),
+    format('Vez do Jogador B ~n'),
     write('Digite o movimento no formato mv(Coord1, Coord2) ou cap(Coord1, [Coord2, Coord3, ..., Coord4]): '),
     read_line_to_string(user_input, Input), % Lê a entrada como string
     (   catch(term_string(Movimento, Input), _, fail) -> % Tenta converter a string para um termo
@@ -277,7 +277,7 @@ casa_vazia(Tabuleiro, (Col, Lin)) :-
 
 % Função para o computador fazer uma jogada com prioridades
 jogador_programa(Tabuleiro, NovoTabuleiro, Jogador) :-
-    write('Vez do computador...'), nl,
+    write('Vez do jogador A'), nl,
     % Primeiro, verifica se pode capturar alguma peça do jogador
     findall((ColOrig, LinOrig, Captura),
         (member((ColOrig, LinOrig, Peca), Tabuleiro),
@@ -397,15 +397,21 @@ mover_peca(Tabuleiro, Jogador, NovoTabuleiro) :-
         write('Computador não tem movimentos válidos.'), nl
     ).
 
-% Função para partida automática
+% Função para partida automática com pausa entre os movimentos
 partida_automatica(Tabuleiro, JogadorAtual) :-
     imprime_tabuleiro(Tabuleiro),
+    aguardar_usuario,  % Aguarda o usuário pressionar Enter ou digitar "proximo"
     ( jogo_terminado(Tabuleiro, Vencedor) -> 
         format('Jogo terminado! O vencedor é: ~w~n', [Vencedor]);
         jogador_programa(Tabuleiro, NovoTabuleiro, JogadorAtual),
         prox_jogador(JogadorAtual, ProxJogador),
         partida_automatica(NovoTabuleiro, ProxJogador)
     ).
+
+% Função para aguardar o usuário pressionar Enter ou digitar "proximo"
+aguardar_usuario :-
+    write('Pressione Enter ou digite "proximo" para o próximo movimento...'), nl,
+    read_line_to_codes(user_input, _).
 
 % Verifica se o movimento é válido
 move_valido(Tabuleiro, Jogador, (ColO, LinO), (ColD, LinD)) :-
