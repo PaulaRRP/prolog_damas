@@ -223,12 +223,12 @@ maior_caminho([C1, C2 | R], Maior) :-
     (T1 >= T2 -> maior_caminho([C1 | R], Maior);
                  maior_caminho([C2 | R], Maior)).
 
-% Valida a captura antes de executá-la
+% Valida a captura antes de executar a captura
 validar_captura(Tab, Jog, (ColO, LinO), CaptLista) :-
     normalizar_lista(CaptLista, CaptListaNormalizada),
     validar_captura_aux(Tab, Jog, (ColO, LinO), CaptListaNormalizada, _).
 
-% Converte átomos para minúsculas
+% Normaliza comando para letras minusculas
 normalizar_lista([], []).
 normalizar_lista([H|T], [HLower|TLower]) :-
     downcase_atom(H, HLower),
@@ -295,7 +295,7 @@ captura_aux(Tab, Jog, (ColO, LinO), [PosD | Capt], NovoTab, (ColFinal, LinFinal)
     ;   captura_aux(NovoTabTemp, Jog, (ColD, LinD), Capt, NovoTab, (ColFinal, LinFinal))
     ).
 
-% Atualiza o tabuleiro após uma captura sem promoção intermediária
+% Atualiza o tabuleiro após uma captura
 atualiza_tabuleiro_captura_sem_promocao(Tab, (ColO, LinO), (ColD, LinD), Jog, NovoTab) :-
     select((ColO, LinO, Peca), Tab, TempTab1),
     (dama(Jog, Peca) ->
