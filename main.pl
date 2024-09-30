@@ -200,30 +200,26 @@ normalizar_lista([H|T], [HLower|TLower]) :-
     downcase_atom(H, HLower),
     normalizar_lista(T, TLower).
 
-
 % Função auxiliar para validar captura
-validar_captura_aux(Tab, Jog, (ColO, LinO), CaptLista, NovoTab) :-
-    CaptLista = [PosD | Capt], % Garantir que a lista seja decomposta corretamente
+validar_captura_aux(Tab, Jog, (ColO, LinO), [PosD | Capt], NovoTab) :-
     atom_chars(PosD, [ColD, LinDChar]),
     atom_number(LinDChar, LinD),
     (   member((ColO, LinO, Peca), Tab),
-        (dama(Jog, Peca) ->
-            mov_cap_valido_dama(Tab, Jog, (ColO, LinO), (ColD, LinD),
-                                PosCapturadas),
+        (   dama(Jog, Peca) ->
+            mov_cap_valido_dama(Tab, Jog, (ColO, LinO), (ColD, LinD), PosCapturadas),
             remover_pecas(Tab, PosCapturadas, TabSemCapt),
             casa_vazia(TabSemCapt, (ColD, LinD))
-        ;
-            mov_cap_valido(Tab, Jog, (ColO, LinO), (ColD, LinD))
+        ;   mov_cap_valido(Tab, Jog, (ColO, LinO), (ColD, LinD))
         )
-    ->  
-        atualiza_tabuleiro_captura(Tab, (ColO, LinO), (ColD, LinD), Jog,
-                                   NovoTabTemp),
-        (Capt = [] -> NovoTab = NovoTabTemp;
-         validar_captura_aux(NovoTabTemp, Jog, (ColD, LinD), Capt,
-                             NovoTab))
-    ;
-        format('Captura inválida! Deve ser: cap(~w, ~w).~n',
-               [ColO, CaptLista]), nl, fail
+    ->
+        atualiza_tabuleiro_captura(Tab, (ColO, LinO), (ColD, LinD), Jog, NovoTabTemp),
+        (   Capt = [] ->
+            NovoTab = NovoTabTemp
+        ;   validar_captura_aux(NovoTabTemp, Jog, (ColD, LinD), Capt, NovoTab)
+        )
+    ;   normalizar_lista([PosD|Capt], CaptNormalizada),
+        format('Captura inválida! Deve ser: cap(~w~w, ~w).~n', [ColO, LinO, CaptNormalizada]), nl,
+        fail
     ).
 
 % Realiza a captura
@@ -261,7 +257,8 @@ remover_pecas(Tab, Posicoes, NovoTab) :-
     foldl(remover_peca, Posicoes, Tab, NovoTab).
 
 remover_peca((Col, Lin), Tab, NovoTab) :-
-    select((Col, Lin, _), Tab, [(Col, Lin, vazio)|NovoTab]).
+    select((Col, Lin, _), Tab, RestanteTab),
+    NovoTab = [(Col, Lin, vazio)|RestanteTab].
 
 % Verifica se uma peça é adversária
 peca_adversaria(jogador_a, P) :- (peça(jogador_b, P); dama(jogador_b, P)).
@@ -315,7 +312,6 @@ mov_cap_valido_dama(Tab, Jog, (ColO, LinO), (ColD, LinD), PosCapt) :-
     DirecaoLin is sign(DifLin),
     caminho_dama_captura(Tab, Jog, (NumColO, LinO), (NumColD, LinD), DirecaoCol, DirecaoLin, false, PosCapt).
 
-
 % Verifica o caminho da dama durante a captura
 caminho_dama_captura(_, _, (NumColD, LinD), (NumColD, LinD), _, _, true, []) :- !.
 caminho_dama_captura(Tab, Jog, (NumColA, LinA), (NumColD, LinD), DirCol, DirLin, Encontrou, PosCapt) :-
@@ -324,16 +320,27 @@ caminho_dama_captura(Tab, Jog, (NumColA, LinA), (NumColD, LinD), DirCol, DirLin,
     nonvar(NumColP), nonvar(LinP),
     coluna_num(ColP, NumColP),
     linha(LinP),
-    ( member((ColP, LinP, vazio), Tab) ->
+    (
+        member((ColP, LinP, vazio), Tab),
+        \+ Encontrou,
+        !,
         caminho_dama_captura(Tab, Jog, (NumColP, LinP), (NumColD, LinD), DirCol, DirLin, Encontrou, PosCapt)
-    ; member((ColP, LinP, Peca), Tab),
-      peca_adversaria(Jog, Peca), \+ Encontrou ->
+    ;
+        member((ColP, LinP, Peca), Tab),
+        peca_adversaria(Jog, Peca),
+        \+ Encontrou,
+        !,
         caminho_dama_captura(Tab, Jog, (NumColP, LinP), (NumColD, LinD), DirCol, DirLin, true, PosResto),
-        PosCapt = [(ColP, LinP)|PosResto]
-    ; Encontrou, member((ColP, LinP, vazio), Tab) ->
+        PosCapt = [(ColP, LinP) | PosResto]
+    ;
+        member((ColP, LinP, vazio), Tab),
+        Encontrou,
+        !,
         caminho_dama_captura(Tab, Jog, (NumColP, LinP), (NumColD, LinD), DirCol, DirLin, true, PosCapt)
-    ; fail
+    ;
+        fail
     ).
+
 % Movimento de captura válido para a peça normal
 mov_cap_valido(Tab, Jog, (ColO, LinO), (ColD, LinD)) :-
     coluna_num(ColO, NumColO), coluna_num(ColD, NumColD),
