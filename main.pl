@@ -18,6 +18,12 @@ peça(jogador_b, peca_b).
 dama(jogador_a, dama_a).
 dama(jogador_b, dama_b).
 
+% Verifica se uma peça pertence ao jogador (peça normal ou dama)
+peca_do_jogador(Jog, Peca) :-
+    peça(Jog, Peca).
+peca_do_jogador(Jog, Peca) :-
+    dama(Jog, Peca).
+
 % Definição das linhas para impressão (de 8 a 1)
 linha_impressao(L) :- between(1, 8, N), L is 9 - N.
 
@@ -115,20 +121,43 @@ jogador_humano(Tabuleiro, NovoTabuleiro, Jogador) :-
     format('Vez do Jogador B ~n'),
     write('Digite mv(Coord1, Coord2) ou cap(Coord1, [Lista]): '),
     read_line_to_string(user_input, Input),
-    (   catch(term_string(Movimento, Input), _, fail) ->
+    (   parse_input(Input, Movimento) ->
         processa_movimento(Movimento, Tabuleiro, NovoTabuleiro, Jogador)
     ;   write('Comando inválido!'), nl,
         jogador_humano(Tabuleiro, NovoTabuleiro, Jogador)
     ).
 
+% Parse da entrada do usuário
+parse_input(Input, Movimento) :-
+    atom_string(InputAtom, Input),
+    catch(atom_to_term(InputAtom, Movimento0, _), _, fail),
+    normalize_movimento(Movimento0, Movimento).
+
+normalize_movimento(mv(PosOrig0, PosDest0), mv(PosOrig, PosDest)) :-
+    normalize_coord(PosOrig0, PosOrig),
+    normalize_coord(PosDest0, PosDest).
+normalize_movimento(cap(PosOrig0, CapturaLista0), cap(PosOrig, CapturaLista)) :-
+    normalize_coord(PosOrig0, PosOrig),
+    maplist(normalize_coord, CapturaLista0, CapturaLista).
+
+normalize_coord(PosIn, PosOut) :-
+    (atom(PosIn) -> PosOut = PosIn ;
+     string(PosIn) -> atom_string(PosOut, PosIn) ;
+     number(PosIn) -> atom_number(PosOut, PosIn) ;
+     fail).
+
 % Processa o movimento do jogador
 processa_movimento(Movimento, Tabuleiro, NovoTabuleiro, Jogador) :-
     (Movimento = mv(PosOrig, PosDest) ->
         (validar_coordenadas(PosOrig), validar_coordenadas(PosDest) ->
-            atom_chars(PosOrig, [ColOrig, LinOrigChar]),
-            atom_number(LinOrigChar, LinOrig),
-            atom_chars(PosDest, [ColDest, LinDestChar]),
-            atom_number(LinDestChar, LinDest),
+            atom_chars(PosOrig, [ColOrigRaw|LinOrigChars]),
+            downcase_atom(ColOrigRaw, ColOrig),
+            atom_chars(LinOrigAtom, LinOrigChars),
+            atom_number(LinOrigAtom, LinOrig),
+            atom_chars(PosDest, [ColDestRaw|LinDestChars]),
+            downcase_atom(ColDestRaw, ColDest),
+            atom_chars(LinDestAtom, LinDestChars),
+            atom_number(LinDestAtom, LinDest),
             (move_valido(Tabuleiro, Jogador, (ColOrig, LinOrig),
                          (ColDest, LinDest)) ->
                 atualiza_tabuleiro(Tabuleiro, (ColOrig, LinOrig),
@@ -143,8 +172,10 @@ processa_movimento(Movimento, Tabuleiro, NovoTabuleiro, Jogador) :-
         )
     ; Movimento = cap(PosOrig, CapturaLista) ->
         (validar_coordenadas(PosOrig) ->
-            atom_chars(PosOrig, [ColOrig, LinOrigChar]),
-            atom_number(LinOrigChar, LinOrig),
+            atom_chars(PosOrig, [ColOrigRaw|LinOrigChars]),
+            downcase_atom(ColOrigRaw, ColOrig),
+            atom_chars(LinOrigAtom, LinOrigChars),
+            atom_number(LinOrigAtom, LinOrig),
             findall(MaiorCaptura,
                     maior_captura(Tabuleiro, Jogador, (ColOrig, LinOrig),
                                   MaiorCaptura), TodasCapturas),
@@ -177,9 +208,12 @@ processa_movimento(Movimento, Tabuleiro, NovoTabuleiro, Jogador) :-
 
 % Valida as coordenadas
 validar_coordenadas(Pos) :-
-    atom_chars(Pos, [Col, LinChar]),
+    atom(Pos),
+    atom_chars(Pos, [ColRaw|LinChars]),
+    downcase_atom(ColRaw, Col),
     member(Col, [a, b, c, d, e, f, g, h]),
-    atom_number(LinChar, Lin),
+    atom_chars(LinAtom, LinChars),
+    atom_number(LinAtom, Lin),
     between(1, 8, Lin).
 
 % Encontra o maior caminho de captura
@@ -202,8 +236,10 @@ normalizar_lista([H|T], [HLower|TLower]) :-
 
 % Função auxiliar para validar captura
 validar_captura_aux(Tab, Jog, (ColO, LinO), [PosD | Capt], NovoTab) :-
-    atom_chars(PosD, [ColD, LinDChar]),
-    atom_number(LinDChar, LinD),
+    atom_chars(PosD, [ColDRaw|LinDChars]),
+    downcase_atom(ColDRaw, ColD),
+    atom_chars(LinDAtom, LinDChars),
+    atom_number(LinDAtom, LinD),
     (   member((ColO, LinO, Peca), Tab),
         (   dama(Jog, Peca) ->
             mov_cap_valido_dama(Tab, Jog, (ColO, LinO), (ColD, LinD), PosCapturadas),
@@ -212,7 +248,7 @@ validar_captura_aux(Tab, Jog, (ColO, LinO), [PosD | Capt], NovoTab) :-
         ;   mov_cap_valido(Tab, Jog, (ColO, LinO), (ColD, LinD))
         )
     ->
-        atualiza_tabuleiro_captura(Tab, (ColO, LinO), (ColD, LinD), Jog, NovoTabTemp),
+        atualiza_tabuleiro_captura_sem_promocao(Tab, (ColO, LinO), (ColD, LinD), Jog, NovoTabTemp),
         (   Capt = [] ->
             NovoTab = NovoTabTemp
         ;   validar_captura_aux(NovoTabTemp, Jog, (ColD, LinD), Capt, NovoTab)
@@ -224,11 +260,15 @@ validar_captura_aux(Tab, Jog, (ColO, LinO), [PosD | Capt], NovoTab) :-
 
 % Realiza a captura
 captura(Tab, Jog, (ColO, LinO), CaptLista, NovoTab) :-
-    captura_aux(Tab, Jog, (ColO, LinO), CaptLista, NovoTab).
+    captura_aux(Tab, Jog, (ColO, LinO), CaptLista, TabSemPromocao, (ColFinal, LinFinal)),
+    promover_se_necessario(TabSemPromocao, Jog, (ColFinal, LinFinal), NovoTab).
 
-captura_aux(Tab, Jog, (ColO, LinO), [PosD | Capt], NovoTab) :-
-    atom_chars(PosD, [ColD, LinDChar]),
-    atom_number(LinDChar, LinD),
+% Função auxiliar para captura com retorno da posição final
+captura_aux(Tab, Jog, (ColO, LinO), [PosD | Capt], NovoTab, (ColFinal, LinFinal)) :-
+    atom_chars(PosD, [ColDRaw|LinDChars]),
+    downcase_atom(ColDRaw, ColD),
+    atom_chars(LinDAtom, LinDChars),
+    atom_number(LinDAtom, LinD),
     member((ColO, LinO, Peca), Tab),
     (dama(Jog, Peca) ->
         mov_cap_valido_dama(Tab, Jog, (ColO, LinO), (ColD, LinD),
@@ -248,9 +288,29 @@ captura_aux(Tab, Jog, (ColO, LinO), [PosD | Capt], NovoTab) :-
         NovoTabTemp = [(ColD, LinD, Peca), (ColO, LinO, vazio),
                        (ColM, LinM, vazio)|TempTab3]
     ),
-    promover_se_necessario(NovoTabTemp, Jog, (ColD, LinD), NovoTabProm),
-    (Capt = [] -> NovoTab = NovoTabProm;
-     captura_aux(NovoTabProm, Jog, (ColD, LinD), Capt, NovoTab)).
+    (   Capt = [] ->
+        NovoTab = NovoTabTemp,
+        ColFinal = ColD,
+        LinFinal = LinD
+    ;   captura_aux(NovoTabTemp, Jog, (ColD, LinD), Capt, NovoTab, (ColFinal, LinFinal))
+    ).
+
+% Atualiza o tabuleiro após uma captura sem promoção intermediária
+atualiza_tabuleiro_captura_sem_promocao(Tab, (ColO, LinO), (ColD, LinD), Jog, NovoTab) :-
+    select((ColO, LinO, Peca), Tab, TempTab1),
+    (dama(Jog, Peca) ->
+        select((ColD, LinD, vazio), TempTab1, TempTab2),
+        NovoTab = [(ColD, LinD, Peca), (ColO, LinO, vazio)|TempTab2]
+    ;
+        coluna_num(ColO, NumColO), coluna_num(ColD, NumColD),
+        LinM is (LinO + LinD) // 2, NumColM is (NumColO + NumColD) // 2,
+        coluna_num(ColM, NumColM),
+        select((ColM, LinM, PecaAdv), TempTab1, TempTab2),
+        peca_adversaria(Jog, PecaAdv),
+        select((ColD, LinD, vazio), TempTab2, TempTab3),
+        NovoTab = [(ColD, LinD, Peca), (ColO, LinO, vazio),
+                   (ColM, LinM, vazio)|TempTab3]
+    ).
 
 % Remove múltiplas peças
 remover_pecas(Tab, Posicoes, NovoTab) :-
@@ -261,8 +321,9 @@ remover_peca((Col, Lin), Tab, NovoTab) :-
     NovoTab = [(Col, Lin, vazio)|RestanteTab].
 
 % Verifica se uma peça é adversária
-peca_adversaria(jogador_a, P) :- (peça(jogador_b, P); dama(jogador_b, P)).
-peca_adversaria(jogador_b, P) :- (peça(jogador_a, P); dama(jogador_a, P)).
+peca_adversaria(Jogador, P) :-
+    prox_jogador(Jogador, Adv),
+    (peça(Adv, P); dama(Adv, P)).
 
 % Encontra a maior sequência de capturas
 maior_captura(Tab, Jog, (ColO, LinO), MaiorCapt) :-
@@ -317,9 +378,8 @@ caminho_dama_captura(_, _, (NumColD, LinD), (NumColD, LinD), _, _, true, []) :- 
 caminho_dama_captura(Tab, Jog, (NumColA, LinA), (NumColD, LinD), DirCol, DirLin, Encontrou, PosCapt) :-
     NumColP is NumColA + DirCol,
     LinP is LinA + DirLin,
-    nonvar(NumColP), nonvar(LinP),
+    dentro_do_tabuleiro(NumColP, LinP),
     coluna_num(ColP, NumColP),
-    linha(LinP),
     (
         member((ColP, LinP, vazio), Tab),
         \+ Encontrou,
@@ -352,24 +412,6 @@ mov_cap_valido(Tab, Jog, (ColO, LinO), (ColD, LinD)) :-
     peca_adversaria(Jog, PecaAdv),
     casa_vazia(Tab, (ColD, LinD)).
 
-% Atualiza o tabuleiro após uma captura
-atualiza_tabuleiro_captura(Tab, (ColO, LinO), (ColD, LinD), Jog, NovoTab) :-
-    select((ColO, LinO, Peca), Tab, TempTab1),
-    (dama(Jog, Peca) ->
-        select((ColD, LinD, vazio), TempTab1, TempTab2),
-        NovoTabTemp = [(ColD, LinD, Peca), (ColO, LinO, vazio)|TempTab2]
-    ;
-        coluna_num(ColO, NumColO), coluna_num(ColD, NumColD),
-        LinM is (LinO + LinD) // 2, NumColM is (NumColO + NumColD) // 2,
-        coluna_num(ColM, NumColM),
-        select((ColM, LinM, PecaAdv), TempTab1, TempTab2),
-        peca_adversaria(Jog, PecaAdv),
-        select((ColD, LinD, vazio), TempTab2, TempTab3),
-        NovoTabTemp = [(ColD, LinD, Peca), (ColO, LinO, vazio),
-                       (ColM, LinM, vazio)|TempTab3]
-    ),
-    promover_se_necessario(NovoTabTemp, Jog, (ColD, LinD), NovoTab).
-
 % Verifica se a casa está vazia
 casa_vazia(Tab, (Col, Lin)) :-
     member((Col, Lin, Peca), Tab), Peca == vazio.
@@ -397,9 +439,11 @@ movimento_valido(Tab, Jog, (ColO, LinO), (ColD, LinD)) :-
         movimento_valido_peca(Tab, Jog, (ColO, LinO), (ColD, LinD))
     ).
 
-% Movimento válido para a dama
+% Movimento válido para a dama (validação)
 movimento_valido_dama(Tab, _, (ColO, LinO), (ColD, LinD)) :-
-    coluna_num(ColO, NumColO), coluna_num(ColD, NumColD),
+    nonvar(ColD), nonvar(LinD),
+    coluna_num(ColO, NumColO),
+    coluna_num(ColD, NumColD),
     DifCol is NumColD - NumColO, DifLin is LinD - LinO,
     abs(DifCol, AbsDifCol), abs(DifLin, AbsDifLin),
     AbsDifCol =:= AbsDifLin, DirecaoCol is sign(DifCol),
@@ -407,29 +451,61 @@ movimento_valido_dama(Tab, _, (ColO, LinO), (ColD, LinD)) :-
     caminho_livre_dama(Tab, (NumColO, LinO), (NumColD, LinD),
                        DirecaoCol, DirecaoLin).
 
-% Verifica se o caminho está livre para a dama
-caminho_livre_dama(_, (NumColD, LinD), (NumColD, LinD), _, _) :- !.
+% Gera movimentos possíveis para a dama
+movimentos_possiveis_dama(Tab, (ColO, LinO), (ColD, LinD)) :-
+    coluna_num(ColO, NumColO),
+    direcao(DirecaoCol), direcao(DirecaoLin),
+    caminho_livre_dama(Tab, (NumColO, LinO), (NumColD, LinD), DirecaoCol, DirecaoLin),
+    coluna_num(ColD, NumColD).
+
+% Verifica se o caminho está livre para a dama e gera movimentos possíveis
 caminho_livre_dama(Tab, (NumColA, LinA), (NumColD, LinD), DirCol, DirLin) :-
-    NumColP is NumColA + DirCol, LinP is LinA + DirLin,
-    coluna_num(ColP, NumColP), linha(LinP),
+    proximo_posicao(NumColA, LinA, DirCol, DirLin, NumColP, LinP),
+    dentro_do_tabuleiro(NumColP, LinP),
+    coluna_num(ColP, NumColP),
     (member((ColP, LinP, vazio), Tab) ->
-        caminho_livre_dama(Tab, (NumColP, LinP), (NumColD, LinD),
-                           DirCol, DirLin)
-    ; fail
+        (NumColD = NumColP, LinD = LinP)
+    ;
+        fail
     ).
+caminho_livre_dama(Tab, (NumColA, LinA), (NumColD, LinD), DirCol, DirLin) :-
+    proximo_posicao(NumColA, LinA, DirCol, DirLin, NumColP, LinP),
+    dentro_do_tabuleiro(NumColP, LinP),
+    coluna_num(ColP, NumColP),
+    member((ColP, LinP, vazio), Tab),
+    caminho_livre_dama(Tab, (NumColP, LinP), (NumColD, LinD), DirCol, DirLin).
+
+proximo_posicao(NumCol, Lin, DirCol, DirLin, NumColP, LinP) :-
+    NumColP is NumCol + DirCol,
+    LinP is Lin + DirLin.
+
+dentro_do_tabuleiro(NumCol, Lin) :-
+    NumCol >= 1, NumCol =< 8,
+    Lin >= 1, Lin =< 8.
+
+direcao(-1).
+direcao(1).
 
 % Movimento válido para a peça normal
-movimento_valido_peca(_, jogador_a, (ColO, LinO), (ColD, LinD)) :-
-    coluna_num(ColO, NumColO), coluna_num(ColD, NumColD),
+movimento_valido_peca(Tab, Jog, (ColO, LinO), (ColD, LinD)) :-
+    movimentos_possiveis_peca(Tab, Jog, (ColO, LinO), (ColD, LinD)),
+    casa_vazia(Tab, (ColD, LinD)).
+
+% Gera movimentos possíveis para uma peça normal
+movimentos_possiveis_peca(_, jogador_a, (ColO, LinO), (ColD, LinD)) :-
+    coluna_num(ColO, NumColO),
     LinD is LinO + 1,
     (NumColD is NumColO - 1 ; NumColD is NumColO + 1),
-    linha(LinD), coluna(ColD), cor_casa(ColD, LinD, escura).
-
-movimento_valido_peca(_, jogador_b, (ColO, LinO), (ColD, LinD)) :-
-    coluna_num(ColO, NumColO), coluna_num(ColD, NumColD),
+    coluna_num(ColD, NumColD),
+    linha(LinD),
+    cor_casa(ColD, LinD, escura).
+movimentos_possiveis_peca(_, jogador_b, (ColO, LinO), (ColD, LinD)) :-
+    coluna_num(ColO, NumColO),
     LinD is LinO - 1,
     (NumColD is NumColO - 1 ; NumColD is NumColO + 1),
-    linha(LinD), coluna(ColD), cor_casa(ColD, LinD, escura).
+    coluna_num(ColD, NumColD),
+    linha(LinD),
+    cor_casa(ColD, LinD, escura).
 
 % Atualiza o tabuleiro após um movimento
 atualiza_tabuleiro(Tab, (ColO, LinO), (ColD, LinD), Jog, NovoTab) :-
@@ -448,7 +524,7 @@ jogador_programa(Tab, NovoTab, Jog) :-
     write('Vez do jogador A'), nl,
     findall((ColO, LinO, Captura),
         (member((ColO, LinO, Peca), Tab),
-         peça(Jog, Peca),
+         peca_do_jogador(Jog, Peca),
          maior_captura(Tab, Jog, (ColO, LinO), Captura),
          Captura \= []
         ),
@@ -501,8 +577,12 @@ mover_peca(Tab, Jog, NovoTab) :-
 % Gera todos os movimentos possíveis
 move_possivel(Tab, Jog, (ColO, LinO), (ColD, LinD)) :-
     member((ColO, LinO, Peca), Tab),
-    peça(Jog, Peca),
-    movimento_valido(Tab, Jog, (ColO, LinO), (ColD, LinD)),
+    peca_do_jogador(Jog, Peca),
+    (dama(Jog, Peca) ->
+        movimentos_possiveis_dama(Tab, (ColO, LinO), (ColD, LinD))
+    ;
+        movimentos_possiveis_peca(Tab, Jog, (ColO, LinO), (ColD, LinD))
+    ),
     casa_vazia(Tab, (ColD, LinD)).
 
 % Partida automática com pausa
