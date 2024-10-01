@@ -1,3 +1,6 @@
+% Luciana Nascimento Santana Prachedes 202065566C
+% Paula Rinco Rodrigues Pereira 201865559C
+
 % Definição das colunas e linhas
 coluna(a). coluna(b). coluna(c). coluna(d).
 coluna(e). coluna(f). coluna(g). coluna(h).
